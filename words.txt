@@ -1,0 +1,17 @@
+Casual：便装
+Gym：体操服
+Closed：闭眼
+Frown：不高兴
+Blush：脸红
+Open：开口
+Smile：微笑
+SummerUniform：夏装
+WinterUniform：冬装
+WorkUniform：工作服
+Lingerie：内衣裤
+Miko：巫女服
+Nurse：护士服
+Blood：血
+Swimsuit：泳装
+WinterCoat：寒衣
+Coat：大衣
