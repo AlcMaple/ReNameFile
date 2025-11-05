@@ -22,7 +22,7 @@ class FileRenamer:
                         source, target = line.split("：", 1)
                         # 不区分大小写
                         pattern = re.compile(re.escape(source), re.IGNORECASE)
-                        self.rules.append((pattern, target))
+                        self.rules.append(("simple", pattern, target, None))
             print(f" 加载了 {len(self.rules)} 条替换规则")
             return True
         except FileNotFoundError:
@@ -39,14 +39,37 @@ class FileRenamer:
                     if not line or line.startswith("#"):
                         continue
 
+                    # 交互式规则
                     if "==>" in line:
                         pattern_str, replacement = line.split("==>", 1)
                         pattern_str = pattern_str.strip()
                         replacement = replacement.strip()
 
                         try:
+                            # 原始字符串
                             pattern = re.compile(pattern_str)
-                            self.rules.append((pattern, replacement))
+
+                            # 特殊规则类型
+                            rule_type = "regex"
+                            metadata = None
+
+                            # "提取数字"规则
+                            if replacement == "{number}":
+                                rule_type = "extract_number"
+                                metadata = {}
+                            # "提取文本"规则
+                            elif replacement == "{text}":
+                                rule_type = "extract_text"
+                                metadata = {}
+                            # "自定义格式"规则
+                            elif "{" in replacement and "}" in replacement:
+                                rule_type = "custom_format"
+                                metadata = {"format_str": replacement}
+
+                            self.rules.append(
+                                (rule_type, pattern, replacement, metadata)
+                            )
+
                         except re.error as e:
                             print(f" 第 {line_num} 行正则表达式错误: {e}")
 
@@ -56,12 +79,131 @@ class FileRenamer:
             print(f" 找不到 regex_rules.txt 文件")
             return False
 
+    def configure_interactive_rules(self):
+        """配置交互式规则的参数"""
+        for i, (rule_type, pattern, replacement, metadata) in enumerate(self.rules):
+            if rule_type == "extract_number":
+                print(f"\n检测到规则 #{i+1}: 提取数字规则")
+                print(f"  模式: {pattern.pattern}")
+                while True:
+                    try:
+                        digits = input(
+                            "  你想把数字格式化成几位数？(输入数字，如 2 表示两位数): "
+                        ).strip()
+                        digits = int(digits)
+                        if digits > 0:
+                            metadata["digits"] = digits
+                            print(f"   已设置为 {digits} 位数")
+                            break
+                        else:
+                            print("  请输入大于0的数字")
+                    except ValueError:
+                        print("  请输入有效的数字")
+
+            elif rule_type == "extract_text":
+                print(f"\n检测到规则 #{i+1}: 提取文本规则")
+                print(f"  模式: {pattern.pattern}")
+                choice = input("  是否转换为大写？(y/n): ").strip().lower()
+                metadata["uppercase"] = choice in ["y", "yes"]
+                choice = input("  是否转换为小写？(y/n): ").strip().lower()
+                metadata["lowercase"] = choice in ["y", "yes"]
+                print(f"   已配置文本提取规则")
+
+            elif rule_type == "custom_format":
+                print(f"\n检测到规则 #{i+1}: 自定义格式规则")
+                print(f"  模式: {pattern.pattern}")
+                print(f"  格式: {replacement}")
+
+                # 提取所有占位符
+                placeholders = re.findall(r"\{(\w+)(?::(\d+))?\}", replacement)
+                for placeholder, width in placeholders:
+                    if placeholder == "number" and not width:
+                        while True:
+                            try:
+                                digits = input(
+                                    f"  占位符 {{{placeholder}}} 要格式化成几位数？: "
+                                ).strip()
+                                digits = int(digits)
+                                if digits > 0:
+                                    if "format_params" not in metadata:
+                                        metadata["format_params"] = {}
+                                    metadata["format_params"][placeholder] = digits
+                                    break
+                                else:
+                                    print("  请输入大于0的数字")
+                            except ValueError:
+                                print("  请输入有效的数字")
+
+                print(f"   已配置自定义格式规则")
+
     def apply_rules(self, filename):
         """应用所有规则到文件名"""
         new_filename = filename
 
-        for pattern, replacement in self.rules:
-            new_filename = pattern.sub(replacement, new_filename)
+        for rule_type, pattern, replacement, metadata in self.rules:
+            match = pattern.search(new_filename)
+
+            if rule_type == "simple":
+                new_filename = pattern.sub(replacement, new_filename)
+
+            elif rule_type == "regex":
+                converted_replacement = replacement
+                converted_replacement = re.sub(
+                    r"\$(\d+)", r"\\\1", converted_replacement
+                )
+                new_filename = pattern.sub(converted_replacement, new_filename)
+
+            elif rule_type == "extract_number" and match:
+                # 提取数字并格式化
+                if match.groups():
+                    number_str = match.group(1)
+                    try:
+                        number = int(number_str)
+                        digits = metadata.get("digits", 1)
+                        formatted_number = str(number).zfill(digits)
+                        new_filename = formatted_number
+                    except ValueError:
+                        pass
+
+            elif rule_type == "extract_text" and match:
+                # 提取文本
+                if match.groups():
+                    text = match.group(1)
+                    if metadata.get("uppercase"):
+                        text = text.upper()
+                    elif metadata.get("lowercase"):
+                        text = text.lower()
+                    new_filename = text
+
+            elif rule_type == "custom_format" and match:
+                # 自定义格式
+                format_str = metadata["format_str"]
+                format_params = metadata.get("format_params", {})
+
+                # 替换占位符
+                result = format_str
+                for i, group in enumerate(match.groups(), 1):
+                    # 处理 \1, \2 等
+                    result = result.replace(f"\\{i}", group if group else "")
+
+                # 处理 {number}, {text} 等占位符
+                if "{number}" in result and match.groups():
+                    try:
+                        number = int(match.group(1))
+                        digits = format_params.get("number", 1)
+                        formatted_number = str(number).zfill(digits)
+                        result = result.replace("{number}", formatted_number)
+                    except (ValueError, IndexError):
+                        pass
+
+                if "{text}" in result and match.groups():
+                    try:
+                        text = match.group(1)
+                        result = result.replace("{text}", text)
+                    except IndexError:
+                        pass
+
+                new_filename = result
 
         return new_filename
 
@@ -149,34 +291,53 @@ photo：照片
 """
 
     # 正则表达式规则示例
-    regex_content = """# 正则表达式替换规则
+    regex_content = r"""# 正则表达式替换规则
 # 格式: 正则模式 ==> 替换内容
-# 使用 \\1, \\2 等引用捕获组
 # 以 # 开头的行为注释
+# 注意：在txt文件中直接写 \d \w 等，不需要双反斜杠
 
-# 示例1: 将日期格式从 YYYY-MM-DD 改为 YYYYMMDD
-(\\d{4})-(\\d{2})-(\\d{2}) ==> \\1\\2\\3
+# ============ 交互式规则（运行时会询问参数）============
 
-# 示例2: 删除文件名中的所有数字
-\\d+ ==> 
+# 提取数字规则（运行时会询问格式化位数）
+# 示例: "File - 1.txt" 提取数字 1，如果设置2位数 -> "01.txt"
+.*\s*-\s*(\d+).* ==> {number}
 
-# 示例3: 将下划线改为连字符
-_ ==> -
+# 提取文本规则（运行时会询问是否转换大小写）
+# 示例: "Prefix-MyFile-Suffix.txt" 提取 MyFile
+.*-([^-]+)-.* ==> {text}
 
-# 示例4: 提取括号中的内容作为新文件名
-.*\\(([^)]+)\\).* ==> \\1
+# 自定义格式规则（运行时会询问占位符参数）
+# 示例: "IMG_20231201_001.jpg" -> "2023-12-01_001.jpg"
+# 注意：使用 $1 $2 $3 来引用捕获组，而不是 \1 \2 \3
+# IMG_(\d{4})(\d{2})(\d{2})_(\d+).* ==> $1-$2-$3_{number}
 
-# 示例5: 在文件名前添加前缀
-^(.+) ==> prefix_\\1
 
-# 示例6: 删除文件名中的空格
-\\s+ ==> 
+# ============ 普通正则表达式规则（直接替换）============
 
-# 示例7: 将多个连续的连字符替换为单个
--+ ==> -
+# 将日期格式从 YYYY-MM-DD 改为 YYYYMMDD
+# 使用 $1 $2 $3 来引用捕获组
+# (\d{4})-(\d{2})-(\d{2}) ==> $1$2$3
 
-# 示例8: 删除版本号 (如 _v1, _v2)
-_v\\d+ ==> 
+# 删除文件名中的所有数字
+# \d+ ==> 
+
+# 将下划线改为连字符
+# _ ==> -
+
+# 删除文件名中的空格
+# \s+ ==> 
+
+# 删除版本号 (如 _v1, _v2)
+# _v\d+ ==> 
+
+# 添加前缀（$1 代表整个原文件名）
+# ^(.+) ==> prefix_$1
+
+# 添加后缀
+# ^(.+) ==> $1_suffix
+
+# 提取括号内容
+# .*\(([^)]+)\).* ==> $1
 """
 
     # 写入示例文件
@@ -228,6 +389,8 @@ def main():
     elif mode == "2":
         if not renamer.load_regex_rules():
             return
+        # 配置交互式规则
+        renamer.configure_interactive_rules()
     else:
         print(" 无效的选择")
         return
