@@ -2,183 +2,62 @@ import os
 import re
 import shutil
 
+from modules.types import Rule
+from modules.loader import RuleLoader
+
 
 class FileRenamer:
-    def __init__(self, script_dir):
-        self.script_dir = script_dir
+    def __init__(self):
         self.rules = []
         self.stats = {"total": 0, "renamed": 0, "copied": 0, "errors": 0}
 
-    def load_replacement_rules(self):
-        """加载替换规则（words.txt）"""
-        rules_file = os.path.join(self.script_dir, "words.txt")
-        try:
-            with open(rules_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    if "：" in line:
-                        source, target = line.split("：", 1)
-                        # 不区分大小写
-                        pattern = re.compile(re.escape(source), re.IGNORECASE)
-                        self.rules.append(("simple", pattern, target, None))
-            print(f" 加载了 {len(self.rules)} 条替换规则")
-            return True
-        except FileNotFoundError:
-            print(f" 找不到 words.txt 文件")
-            return False
-
-    def load_regex_rules(self):
-        """加载正则表达式规则（regex_rules.txt）"""
-        rules_file = os.path.join(self.script_dir, "regex_rules.txt")
-        try:
-            with open(rules_file, "r", encoding="utf-8") as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-
-                    # 交互式规则
-                    if "==>" in line:
-                        pattern_str, replacement = line.split("==>", 1)
-                        pattern_str = pattern_str.strip()
-                        replacement = replacement.strip()
-
-                        try:
-                            # 原始字符串
-                            pattern = re.compile(pattern_str)
-
-                            # 特殊规则类型
-                            rule_type = "regex"
-                            metadata = None
-
-                            # "提取数字"规则
-                            if replacement == "{number}":
-                                rule_type = "extract_number"
-                                metadata = {}
-                            # "提取文本"规则
-                            elif replacement == "{text}":
-                                rule_type = "extract_text"
-                                metadata = {}
-                            # "自定义格式"规则
-                            elif "{" in replacement and "}" in replacement:
-                                rule_type = "custom_format"
-                                metadata = {"format_str": replacement}
-
-                            self.rules.append(
-                                (rule_type, pattern, replacement, metadata)
-                            )
-
-                        except re.error as e:
-                            print(f" 第 {line_num} 行正则表达式错误: {e}")
-
-            print(f" 加载了 {len(self.rules)} 条正则表达式规则")
-            return len(self.rules) > 0
-        except FileNotFoundError:
-            print(f" 找不到 regex_rules.txt 文件")
-            return False
-
-    def configure_interactive_rules(self):
-        """配置交互式规则的参数"""
-        for i, (rule_type, pattern, replacement, metadata) in enumerate(self.rules):
-            if rule_type == "extract_number":
-                print(f"\n检测到规则 #{i+1}: 提取数字规则")
-                print(f"  模式: {pattern.pattern}")
-                while True:
-                    try:
-                        digits = input(
-                            "  你想把数字格式化成几位数？(输入数字，如 2 表示两位数): "
-                        ).strip()
-                        digits = int(digits)
-                        if digits > 0:
-                            metadata["digits"] = digits
-                            print(f"   已设置为 {digits} 位数")
-                            break
-                        else:
-                            print("  请输入大于0的数字")
-                    except ValueError:
-                        print("  请输入有效的数字")
-
-            elif rule_type == "extract_text":
-                print(f"\n检测到规则 #{i+1}: 提取文本规则")
-                print(f"  模式: {pattern.pattern}")
-                choice = input("  是否转换为大写？(y/n): ").strip().lower()
-                metadata["uppercase"] = choice in ["y", "yes"]
-                choice = input("  是否转换为小写？(y/n): ").strip().lower()
-                metadata["lowercase"] = choice in ["y", "yes"]
-                print(f"   已配置文本提取规则")
-
-            elif rule_type == "custom_format":
-                print(f"\n检测到规则 #{i+1}: 自定义格式规则")
-                print(f"  模式: {pattern.pattern}")
-                print(f"  格式: {replacement}")
-
-                # 提取所有占位符
-                placeholders = re.findall(r"\{(\w+)(?::(\d+))?\}", replacement)
-                for placeholder, width in placeholders:
-                    if placeholder == "number" and not width:
-                        while True:
-                            try:
-                                digits = input(
-                                    f"  占位符 {{{placeholder}}} 要格式化成几位数？: "
-                                ).strip()
-                                digits = int(digits)
-                                if digits > 0:
-                                    if "format_params" not in metadata:
-                                        metadata["format_params"] = {}
-                                    metadata["format_params"][placeholder] = digits
-                                    break
-                                else:
-                                    print("  请输入大于0的数字")
-                            except ValueError:
-                                print("  请输入有效的数字")
-
-                print(f"   已配置自定义格式规则")
+    def set_rules(self, rules):
+        """设置重命名规则"""
+        self.rules = rules
 
     def apply_rules(self, filename):
         """应用所有规则到文件名"""
         new_filename = filename
 
-        for rule_type, pattern, replacement, metadata in self.rules:
-            match = pattern.search(new_filename)
+        for rule in self.rules:
+            match = rule.pattern.search(new_filename)
 
-            if rule_type == "simple":
-                new_filename = pattern.sub(replacement, new_filename)
+            if rule.rule_type == "simple":
+                new_filename = rule.pattern.sub(rule.replacement, new_filename)
 
-            elif rule_type == "regex":
-                converted_replacement = replacement
+            elif rule.rule_type == "regex":
+                converted_replacement = rule.replacement
                 converted_replacement = re.sub(
                     r"\$(\d+)", r"\\\1", converted_replacement
                 )
-                new_filename = pattern.sub(converted_replacement, new_filename)
+                new_filename = rule.pattern.sub(converted_replacement, new_filename)
 
-            elif rule_type == "extract_number" and match:
+            elif rule.rule_type == "extract_number" and match:
                 # 提取数字并格式化
                 if match.groups():
                     number_str = match.group(1)
                     try:
                         number = int(number_str)
-                        digits = metadata.get("digits", 1)
+                        digits = rule.metadata.get("digits", 1)
                         formatted_number = str(number).zfill(digits)
                         new_filename = formatted_number
                     except ValueError:
                         pass
 
-            elif rule_type == "extract_text" and match:
+            elif rule.rule_type == "extract_text" and match:
                 # 提取文本
                 if match.groups():
                     text = match.group(1)
-                    if metadata.get("uppercase"):
+                    if rule.metadata.get("uppercase"):
                         text = text.upper()
-                    elif metadata.get("lowercase"):
+                    elif rule.metadata.get("lowercase"):
                         text = text.lower()
                     new_filename = text
 
-            elif rule_type == "custom_format" and match:
+            elif rule.rule_type == "custom_format" and match:
                 # 自定义格式
-                format_str = metadata["format_str"]
-                format_params = metadata.get("format_params", {})
+                format_str = rule.metadata["format_str"]
+                format_params = rule.metadata.get("format_params", {})
 
                 # 替换占位符
                 result = format_str
@@ -378,22 +257,28 @@ def main():
         print("\n示例文件已创建，请编辑配置文件后重新运行程序。")
         return
 
-    # 创建重命名器实例
-    renamer = FileRenamer(script_dir)
+    # 创建规则加载器
+    rule_loader = RuleLoader(script_dir)
 
     # 根据模式加载规则
     print("\n加载规则...")
+    rules = []
+
     if mode == "1":
-        if not renamer.load_replacement_rules():
+        rules = rule_loader.load_simple_rules()
+        if not rules:
             return
     elif mode == "2":
-        if not renamer.load_regex_rules():
+        rules = rule_loader.load_regex_rules(interactive=True)
+        if not rules:
             return
-        # 配置交互式规则
-        renamer.configure_interactive_rules()
     else:
         print(" 无效的选择")
         return
+
+    # 创建重命名器实例并设置规则
+    renamer = FileRenamer()
+    renamer.set_rules(rules)
 
     # 获取输入目录
     print()
