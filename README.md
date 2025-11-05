@@ -18,12 +18,56 @@
 
 # 使用
 
-- 准备需要替换文件名的内容，格式按照words.txt文件格式，每行一个需要替换的词语，格式为：原词语：新词语
+- 准备需要替换文件名的内容，格式按照 words.txt 文件格式，每行一个需要替换的词语，格式为：原词语：新词语
+  > 注意是中文冒号
 - 准备需要重命名文件的文件夹绝对路径路径
-- 运行main.py文件，输入需要替换的文件名的文件夹绝对路径
+- 运行 main.py 文件，输入需要替换的文件名的文件夹绝对路径
+
+# 可视化教程
+
+## 重命名前目录结构
+
+```bash
+C:\
+├── ReNameFile
+│   ├── rename_files.py
+│   └── words.txt
+│
+└── MySourceFiles
+    ├── report_A_daily.pdf
+    ├── MEETING_NOTES_projectX.docx
+    └── UNCHANGED_FILE.txt
+```
+
+## 准备 words.txt
+
+```bash
+report：报告
+daily：日报
+ProjectX：大型项目A
+```
+
+## 重命名后的结构
+
+```bash
+C:\
+├── MyScript
+│   ├── rename_files.py
+│   ├── words.txt
+│   └── output
+│       ├── 报告_日报.pdf
+│       ├── MEETING_NOTES_大型项目A.docx
+│       └── UNCHANGED_FILE.txt
+│
+└── MySourceFiles
+    ├── report_A_daily.pdf
+    ├── MEETING_NOTES_projectX.docx
+    └── UNCHANGED_FILE.txt
+```
 
 # 项目扩展
 
-| 状态 | 任务 | 备注 |
-|:---:|---|---|
-| ⬜ | 支持重命名子目录下的文件 | |
+| 状态 | 任务                                                   | 备注 |
+| :--: | ------------------------------------------------------ | ---- |
+|  ⬜  | 支持重命名子目录下的文件                               |      |
+|  ⬜  | 允许选择按原结构输出重命名后的文件或者全部重命名后提取 |      |

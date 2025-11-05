@@ -9,11 +9,11 @@ def rename_files(directory_path):
     # 读取替换规则
     replacement_rules = {}
     # 获取项目文件夹绝对路径
-    '''
+    """
         os.path.abspath(path)：返回path规范化的绝对路径。    /home/user/code/script.py
         os.path.dirname(path)：返回path中去掉文件名后的路径。    若路径是 /home/user/code/script.py，则返回 /home/user/code
         __file__：表示当前脚本文件的路径     /home/user/code/script.py
-    '''
+    """
     path = os.path.dirname(os.path.abspath(__file__))
     try:
         # 只读方式打开文件
@@ -43,16 +43,13 @@ def rename_files(directory_path):
 
         filename, extension = os.path.splitext(file)
 
-        # 将_A_转换为_
-        new_filename = filename.replace("_A_", "_")
-
         # 应用替换规则
         for source, target in replacement_rules.items():
             # 不区分大小写替换
             pattern = re.compile(re.escape(source), re.IGNORECASE)
-            new_filename = pattern.sub(target, new_filename)
+            filename = pattern.sub(target, filename)
 
-        new_file = new_filename + extension
+        new_file = filename + extension
 
         # 复制文件到输出目录，如果需要重命名则用新名字
         source_path = os.path.join(directory_path, file)
