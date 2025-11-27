@@ -2,7 +2,6 @@ import os
 import re
 import shutil
 
-from modules.types import Rule
 from modules.loader import RuleLoader
 
 
@@ -16,46 +15,58 @@ class FileRenamer:
         self.rules = rules
 
     def apply_rules(self, filename):
-        """应用所有规则到文件名"""
+        """
+        接收一个原始文件名，根据加载的规则列表，依次应用转换逻辑
+
+        :param filename: 原始文件名（不含扩展名）
+        :return: 处理后的新文件名
+        """
         new_filename = filename
 
         for rule in self.rules:
+            # 检查当前文件名是否匹配规则中的正则模式
             match = rule.pattern.search(new_filename)
 
+            # 查找替换
             if rule.rule_type == "simple":
                 new_filename = rule.pattern.sub(rule.replacement, new_filename)
 
+            # 正则替换
             elif rule.rule_type == "regex":
                 converted_replacement = rule.replacement
+                # 兼容性处理
                 converted_replacement = re.sub(
                     r"\$(\d+)", r"\\\1", converted_replacement
                 )
                 new_filename = rule.pattern.sub(converted_replacement, new_filename)
 
+            # 提取文件名中的数字并进行格式化
             elif rule.rule_type == "extract_number" and match:
-                # 提取数字并格式化
                 if match.groups():
                     number_str = match.group(1)
                     try:
                         number = int(number_str)
+                        # 获取需要补零的位数 (例如 3 -> 001)
                         digits = rule.metadata.get("digits", 1)
                         formatted_number = str(number).zfill(digits)
                         new_filename = formatted_number
                     except ValueError:
-                        pass
+                        pass  # 转换失败，保持原名
 
+            # 提取特定文本并转换大小写
             elif rule.rule_type == "extract_text" and match:
-                # 提取文本
                 if match.groups():
                     text = match.group(1)
+                    # 转大写
                     if rule.metadata.get("uppercase"):
                         text = text.upper()
+                    # 转小写
                     elif rule.metadata.get("lowercase"):
                         text = text.lower()
                     new_filename = text
 
+            # 自定义格式
             elif rule.rule_type == "custom_format" and match:
-                # 自定义格式
                 format_str = rule.metadata["format_str"]
                 format_params = rule.metadata.get("format_params", {})
 
