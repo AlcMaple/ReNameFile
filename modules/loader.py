@@ -3,7 +3,7 @@
 统一的规则加载接口
 """
 
-from typing import List
+from typing import List, Optional
 from .types import Rule
 from .simple_loader import SimpleRuleLoader
 from .regex_loader import RegexRuleLoader
@@ -13,14 +13,16 @@ from .configurator import InteractiveConfigurator
 class RuleLoader:
     """主规则加载器"""
 
-    def __init__(self, script_dir: str):
+    def __init__(self, script_dir: str, configurator: Optional[InteractiveConfigurator] = None):
         """
         初始化规则加载器
 
         Args:
             script_dir: 脚本所在目录
+            configurator: 自定义配置器，默认使用标准输入输出
         """
         self.script_dir = script_dir
+        self.configurator = configurator or InteractiveConfigurator()
 
     def load_simple_rules(self) -> List[Rule]:
         """
@@ -44,6 +46,6 @@ class RuleLoader:
         rules = RegexRuleLoader.load(self.script_dir)
 
         if interactive and rules:
-            InteractiveConfigurator.configure(rules)
+            self.configurator.configure(rules)
 
         return rules
